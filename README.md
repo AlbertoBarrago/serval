@@ -57,11 +57,11 @@ Implemented:
   never alter the deterministic score, only explain it.
   `--explain-provider` picks the backend: `ollama` (default, a local
   daemon), `claude`/`codex`/`gemini` (a local CLI you already have
-  installed and signed in — reuses your existing subscription, no API
+  installed and signed in: reuses your existing subscription, no API
   key needed), or `anthropic`/`openai`/`gemini-api` (a direct API call
   with your own key, via `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/
   `GEMINI_API_KEY`, no CLI required). On a directory or multi-file
-  diff, this is one call per file, sequentially — can be slow.
+  diff, this is one call per file, sequentially, so it can be slow.
 - TTY-aware colored output, respecting `NO_COLOR`
 - Language support: JavaScript/TypeScript (relative ESM/CommonJS
   imports, `tsconfig.json` `paths`/`baseUrl`), Go (imports resolved
