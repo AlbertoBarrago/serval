@@ -27,6 +27,10 @@ LLM.
 
 ## Status
 
+> **Maintenance mode.** Serval is feature-complete within its documented
+> scope: no new language analyzers or CI providers are planned. Bug
+> fixes and compatibility updates (Go toolchain, Homebrew) still land.
+
 Implemented:
 
 - `serval inspect [path]`: direct/indirect dependents, Git history,
