@@ -212,41 +212,29 @@ Fixture repositories used by tests live under `testdata/fixtures/`.
 
 ## Contributing
 
-This repository is colocated with Git but developed using
-[Jujutsu (jj)](https://jj-vcs.github.io/jj/latest/) as the primary VCS.
-Plain `git` commands still work for read-only inspection (`git log`,
-`git diff`), but the day-to-day flow uses `jj`.
-
-Work happens **directly on `main`** — no feature branches, no pull
-requests. A typical change looks like this:
+Work happens **directly on `main`** with plain Git: no feature
+branches, no pull requests. A typical change looks like this:
 
 ```bash
 # Fetch first: main may have moved from another machine/session since
 # you last looked (this repo is worked from more than one).
-jj git fetch
-
-# Start a new change on top of the latest main
-jj new main
+git switch main
+git pull --rebase
 
 # ... edit files ...
 
-# Describe the change once it's ready
-jj describe -m "fix: describe what actually changed"
+# Commit once the change is ready
+git add -A
+git commit -m "fix: describe what actually changed"
 
-# Advance main to this change, then push it
-jj bookmark set main -r @
-jj git push --bookmark main
+# Push it
+git push origin main
 ```
 
-Working copy changes in jj are always an anonymous commit (`@`);
-bookmarks (jj's equivalent of branches) are separate, movable pointers
-that only advance when you explicitly `jj bookmark set` them, so
-there's no "detached HEAD" state to worry about.
-
-If `jj git push` refuses with "stale info" (remote `main` moved since
-your last fetch), don't force it: `jj git fetch`, inspect the new
-commit(s) (`jj show <rev> --stat`), and rebase your change on top
-(`jj rebase -d main`) instead of overwriting.
+If `git push` is rejected because `origin/main` moved since your last
+fetch, don't force it: `git fetch`, inspect the new commit(s)
+(`git log HEAD..origin/main`), then `git pull --rebase` and push again
+instead of overwriting.
 
 ## License
 

@@ -1,21 +1,13 @@
-# Serval — Project Notes
+# Serval: Project Notes
 
-## VCS: Jujutsu (jj), not plain git
-This repo is colocated with git but the working VCS is **jj**. Use `jj`
-commands for the day-to-day flow, not `git commit`/`git checkout`:
+## VCS: plain git, directly on `main`
+The working VCS is plain **git**. Work happens **directly on `main`**:
+no feature branches, no pull requests. This overrides the global
+branch-first rule for this repo.
 
-- `jj status`, `jj log` to inspect state (working-copy changes are
-  already a commit under `@`, no separate staging step)
-- `jj describe -m "..."` to set/update the message on the current change
-- `jj new` to start a new change on top of the current one
-- `jj git push` to push to the colocated git remote
-- Plain `git` commands (status/log/diff) still work for read-only
-  inspection since the repo is colocated, but don't use `git commit`,
-  `git add`, or `git checkout` for the actual workflow.
-
-Work happens **directly on `main`** — no feature branches, no pull
-requests. This repo is worked from more than one machine/session, so
-always `jj git fetch` before starting non-trivial work and before
-pushing. If `jj git push` refuses with "stale info", don't force it:
-fetch, inspect the new remote commit(s), and rebase on top instead of
-overwriting. Push only on explicit confirmation.
+This repo is worked from more than one machine/session, so always
+`git fetch` before starting non-trivial work and before pushing. If
+`git push` is rejected because `origin/main` moved, don't force it:
+inspect the new remote commit(s) (`git log HEAD..origin/main`), then
+`git pull --rebase` and push again. Never `git push --force` on `main`.
+Push only on explicit confirmation.
