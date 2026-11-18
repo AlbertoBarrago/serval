@@ -1,0 +1,16 @@
+[package]
+name = "cli"
+version = "0.1.0"
+
+[[bin]]
+name = "tool"
+path = "src/main.rs"
+
+[dependencies]
+core-types = { workspace = true }
+app = { path = "../../crates/app" }
+legacy = { path = "../../crates/legacy" }
+ext = { path = "../../../vendor/ext" }
+
+[target.'cfg(unix)'.dependencies]
+net-io = { workspace = true }

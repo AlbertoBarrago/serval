@@ -1,0 +1,10 @@
+[package]
+name = "net-io"
+version = "0.1.0"
+
+# The library is known in Rust paths as netio, not net_io.
+[lib]
+name = "netio"
+
+[dependencies.core-types]
+path = "../core-types"

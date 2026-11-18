@@ -5,6 +5,19 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Rust: `use` paths into a sibling crate of the same Cargo workspace
+  now resolve through that crate's module layout, so changing a shared
+  crate shows every member that imports it. The workspace root's
+  `[workspace] members` (globs included) and `exclude` are read, and a
+  member names a sibling it depends on with `path = "..."` or with
+  `workspace = true` and a `path` in `[workspace.dependencies]`, by its
+  library name (`[lib] name` honored) or by the dependency key when
+  renamed with `package = "..."`. `::name::...` extern paths resolve
+  too. Registry dependencies, std, and path dependencies outside the
+  workspace stay external. See `docs/architecture.md`.
+
 ## [0.2.2] (2026-11-18)
 
 ### Added

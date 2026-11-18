@@ -216,8 +216,11 @@ Implemented in `internal/repository` (`rustresolve.go`, `cargo.go`) and
   module too high and add a false edge from nearly every file to its
   parent module.
 - Each file belongs to the crate of the nearest `Cargo.toml` above it,
-  read line by line for `[package] name`, `[lib] name` and `[lib] path`
-  only (basic or literal strings; no TOML dependency for three keys).
+  read by a minimal line-based reader (`readManifest` in `cargo.go`)
+  for `[package] name`, `[lib] name` and `[lib] path`, dependency
+  entries, and `[workspace]` (table headers, dotted and quoted keys,
+  comments, inline tables, multi-line arrays; multi-line strings are
+  skipped; no TOML dependency for a handful of keys).
   Its crate root follows Cargo's default target layout: `src/`,
   `src/bin/x.rs` or `src/bin/x/main.rs`, and the same two shapes under
   `tests/`, `examples/`, `benches/`. Under `src/`, a crate with both a
@@ -242,17 +245,41 @@ Implemented in `internal/repository` (`rustresolve.go`, `cargo.go`) and
   same idea as Python's from-import fallback, extended to any depth). A
   bare path (2018 edition) resolves only when at least its first
   segment is a child module of the current one (which shadows any
-  crate name, as in rustc); otherwise it is an external crate. `std`/`core`/`alloc`, a leading `::`, and other
-  crates (including members of the same workspace) are recorded as
-  external, exactly like a JS/TS bare specifier into `node_modules`;
-  the one exception is the crate's own library name, used from its
-  binaries, tests and examples (not from inside the library itself).
+  crate name, as in rustc); otherwise it names a crate. `std`/`core`/`alloc`
+  and registry dependencies are recorded as external, exactly like a
+  JS/TS bare specifier into `node_modules`. Two crate names resolve:
+  the crate's own library name, used from its binaries, tests and
+  examples (not from inside the library itself), and a sibling crate of
+  the same Cargo workspace (below). A leading `::` always names a
+  crate, never a local module, so `::sibling::x` resolves the same way.
+- Cargo workspaces: the workspace root is the nearest `Cargo.toml` at
+  or above the crate with a `[workspace]` section. Its `members`
+  (globs expanded with `filepath.Glob`, keeping directories with a
+  `Cargo.toml`) and the root package are members; `exclude` removes
+  directories and everything below them. A member can name a sibling
+  only through a dependency it declares, as in rustc's extern prelude:
+  `path = "..."`, or `workspace = true` with a `path` in
+  `[workspace.dependencies]`, in any dependency table
+  (`[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, the
+  `[target.'cfg(...)']` forms, and `[dependencies.name]` tables; all
+  are treated as visible to every file of the crate). The dependency
+  must lie inside the workspace root and not be excluded (Cargo makes
+  such a path dependency a member even when `members` does not list
+  it), and have a library on disk. It is named by its library name
+  (`[lib] name`, else the package name, dashes to underscores), or by
+  the dependency key when `package = "..."` renames it. The path then
+  resolves through the sibling's module layout from its library root,
+  like the crate's own library name. Path dependencies outside the
+  workspace root, crates that are not members (excluded, or outside
+  any workspace), and `package.workspace` (an explicit root) are not
+  followed: those paths stay external.
 - Raw identifiers are normalized (`crate::r#type` is `type.rs`), and a
   use tree needs no whitespace after the keyword (`use{a, b};`,
   `use::dep::X;`).
 
-Explicitly out of scope: Cargo workspaces (cross-crate `use` between
-members), `#[path = "..."]` attributes, macro-generated `mod`/`use`,
+Explicitly out of scope: inline qualified paths outside `use`
+(`other_crate::f()` or `crate::a::f()` in an expression), `#[path = "..."]`
+attributes, macro-generated `mod`/`use`,
 and three stripper limits. Raw strings (`r"..."`, `r#"..."#`) are lexed
 as ordinary strings, so one containing a `"` or ending in a backslash
 can expose its contents as code or hide the code after it. Nested

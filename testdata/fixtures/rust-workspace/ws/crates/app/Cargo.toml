@@ -1,0 +1,9 @@
+[package]
+name = "app"
+version = "0.1.0"
+
+[dependencies]
+core-types.workspace = true
+# Renamed: the code says transport::, not netio::.
+transport = { package = "net-io", path = "../net-io" }
+serde = { workspace = true }

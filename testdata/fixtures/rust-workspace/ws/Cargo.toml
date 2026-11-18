@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+# Globs and explicit paths are both accepted; crates/legacy is excluded.
+members = [
+    "crates/*",
+    "tools/cli", # the command line front end
+]
+exclude = ["crates/legacy"]
+
+[workspace.dependencies]
+core-types = { path = "crates/core-types", version = "0.1.0" }
+net-io = { path = "crates/net-io" }
+serde = { version = "1", features = ["derive"] }
