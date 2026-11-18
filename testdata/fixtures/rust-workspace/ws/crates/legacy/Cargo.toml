@@ -1,0 +1,6 @@
+[package]
+name = "legacy"
+version = "0.1.0"
+
+[dependencies]
+core-types = { path = "../core-types" }

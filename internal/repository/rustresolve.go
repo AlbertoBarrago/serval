@@ -20,14 +20,20 @@ var rustTargetDirs = map[string]bool{"tests": true, "examples": true, "benches":
 
 // RustResolver resolves Rust `mod` declarations and `use` paths to the
 // module file they name. Each file belongs to the crate of the nearest
-// Cargo.toml above it. Paths into another crate (std, dependencies,
-// other workspace members) are recorded as external, matching the
-// treatment of JS/TS bare specifiers and Go module dependencies; the
-// one exception is the crate's own library, named from its binaries,
-// tests and examples.
+// Cargo.toml above it. Paths into another crate are recorded as
+// external (std, registry dependencies), matching the treatment of
+// JS/TS bare specifiers and Go module dependencies, with two
+// exceptions: the crate's own library, named from its binaries, tests
+// and examples, and the library of a sibling crate of the same Cargo
+// workspace that the crate depends on by path.
 type RustResolver struct {
+	// manifests caches the Cargo.toml read in each directory (nil for none).
+	manifests map[string]*RustCrate
 	// crates caches the crate (nil for none) found from each directory.
 	crates map[string]*RustCrate
+	// externs caches, per crate directory, the sibling workspace crates
+	// it can name, keyed by the name used in Rust paths.
+	externs map[string]map[string]*RustCrate
 	// rootMods caches, per crate root file, the names of the modules it
 	// declares at file level (`mod x;`).
 	rootMods map[string]map[string]bool
@@ -36,8 +42,10 @@ type RustResolver struct {
 // NewRustResolver builds a resolver with empty caches.
 func NewRustResolver() *RustResolver {
 	return &RustResolver{
-		crates:   make(map[string]*RustCrate),
-		rootMods: make(map[string]map[string]bool),
+		manifests: make(map[string]*RustCrate),
+		crates:    make(map[string]*RustCrate),
+		externs:   make(map[string]map[string]*RustCrate),
+		rootMods:  make(map[string]map[string]bool),
 	}
 }
 
@@ -63,7 +71,7 @@ func (r *RustResolver) Resolve(fromFile string, imp analyzer.RawImport) []string
 	if imp.ModDecl {
 		target = moduleFile(filepath.Join(current, imp.Specifier), root)
 	} else {
-		target = resolveUse(crate, root, current, strings.Split(imp.Specifier, "::"))
+		target = r.resolveUse(crate, root, current, strings.Split(imp.Specifier, "::"))
 	}
 	if target == "" || target == fromFile {
 		return nil
@@ -71,10 +79,16 @@ func (r *RustResolver) Resolve(fromFile string, imp analyzer.RawImport) []string
 	return []string{target}
 }
 
-func resolveUse(crate *RustCrate, root crateRoot, current string, segs []string) string {
+func (r *RustResolver) resolveUse(crate *RustCrate, root crateRoot, current string, segs []string) string {
 	switch first := segs[0]; {
-	case first == "" || externalRustRoots[first]:
+	case externalRustRoots[first]:
 		return ""
+	case first == "":
+		// ::name is always an extern crate path, never a local module.
+		if len(segs) < 2 {
+			return ""
+		}
+		return r.resolveExtern(crate, root, segs[1:])
 	case first == "crate":
 		if root.dir == "" {
 			return ""
@@ -102,11 +116,87 @@ func resolveUse(crate *RustCrate, root crateRoot, current string, segs []string)
 	if f := longestModule(current, segs, 1, root); f != "" {
 		return f
 	}
-	if crate != nil && crate.libRoot != "" && root.file != crate.libRoot && segs[0] == crate.LibName {
-		lib := crateRoot{file: crate.libRoot, dir: filepath.Dir(crate.libRoot)}
-		return longestModule(lib.dir, segs[1:], 0, lib)
+	return r.resolveExtern(crate, root, segs)
+}
+
+// resolveExtern resolves a path whose first segment names a crate: the
+// crate's own library (outside the library itself), or the library of a
+// sibling workspace crate it depends on. Anything else is external.
+func (r *RustResolver) resolveExtern(crate *RustCrate, root crateRoot, segs []string) string {
+	if crate == nil {
+		return ""
 	}
-	return ""
+	lib := crate
+	if crate.libRoot == "" || root.file == crate.libRoot || segs[0] != crate.LibName {
+		lib = r.siblings(crate)[segs[0]]
+	}
+	if lib == nil || lib.libRoot == "" {
+		return ""
+	}
+	libRoot := crateRoot{file: lib.libRoot, dir: filepath.Dir(lib.libRoot)}
+	return longestModule(libRoot.dir, segs[1:], 0, libRoot)
+}
+
+// siblings returns the crates of crate's workspace that crate can name
+// in Rust paths, keyed by that name. Following Cargo, a sibling is a
+// dependency declared with `path = "..."`, or with `workspace = true`
+// and a `path` in [workspace.dependencies], whose directory lies inside
+// the workspace (not excluded) and holds a library. Its name is the
+// dependency key when the entry renames it with `package = "..."`, else
+// the sibling's library name. A crate outside any workspace, or not one
+// of its members, names no sibling: its path dependencies stay external.
+func (r *RustResolver) siblings(crate *RustCrate) map[string]*RustCrate {
+	if names, ok := r.externs[crate.dir]; ok {
+		return names
+	}
+	names := make(map[string]*RustCrate)
+	r.externs[crate.dir] = names
+
+	ws := r.workspaceFor(crate.dir)
+	if ws == nil || !ws.hasMember(crate.dir) {
+		return names
+	}
+	for _, dep := range crate.deps {
+		if dep.inherited {
+			wsDep, ok := ws.deps[dep.key]
+			if !ok {
+				continue
+			}
+			dep = rustDep{key: dep.key, renamed: wsDep.renamed, dir: wsDep.dir}
+		}
+		if dep.dir == crate.dir || !ws.contains(dep.dir) {
+			continue
+		}
+		target := r.manifestAt(dep.dir)
+		if target == nil || target.libRoot == "" {
+			continue
+		}
+		name := target.LibName
+		if dep.renamed {
+			name = strings.ReplaceAll(dep.key, "-", "_")
+		}
+		if _, dup := names[name]; !dup {
+			names[name] = target
+		}
+	}
+	return names
+}
+
+// workspaceFor returns the workspace of the crate in dir: the nearest
+// Cargo.toml at or above dir that has a [workspace] section, or nil.
+// The `package.workspace` key, which points at a root explicitly, is
+// not read.
+func (r *RustResolver) workspaceFor(dir string) *rustWorkspace {
+	for {
+		if m := r.manifestAt(dir); m != nil && m.workspace != nil {
+			return m.workspace
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return nil
+		}
+		dir = parent
+	}
 }
 
 // longestModule returns the module file for the longest prefix of segs
@@ -268,19 +358,31 @@ func (r *RustResolver) crateFor(dir string) *RustCrate {
 	if crate, ok := r.crates[dir]; ok {
 		return crate
 	}
-	crate, err := LoadRustCrate(dir)
-	if err != nil {
-		// The manifest exists but can't be read: stop here instead of
-		// walking up, or the file would be misattributed to an outer crate.
-		fmt.Fprintf(os.Stderr, "warning: ignoring %s: %v\n", filepath.Join(dir, "Cargo.toml"), err)
-		r.crates[dir] = nil
-		return nil
-	}
-	if crate == nil {
+	crate := r.manifestAt(dir)
+	if crate == nil && !isFile(filepath.Join(dir, "Cargo.toml")) {
 		if parent := filepath.Dir(dir); parent != dir {
 			crate = r.crateFor(parent)
 		}
 	}
+	// An unreadable manifest stops the walk instead of letting the file
+	// be misattributed to an outer crate.
 	r.crates[dir] = crate
 	return crate
+}
+
+// manifestAt returns the Cargo.toml read in dir itself, or nil when
+// there is none. A manifest that can't be read is reported on stderr
+// and treated as absent, the same way Scanner reports unreadable files:
+// paths into that crate go unresolved rather than aborting the scan.
+func (r *RustResolver) manifestAt(dir string) *RustCrate {
+	if m, ok := r.manifests[dir]; ok {
+		return m
+	}
+	m, err := LoadRustCrate(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: ignoring %s: %v\n", filepath.Join(dir, "Cargo.toml"), err)
+		m = nil
+	}
+	r.manifests[dir] = m
+	return m
 }

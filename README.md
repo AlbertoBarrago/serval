@@ -74,9 +74,10 @@ Implemented:
   dependency imports recorded as external), C (quoted `#include`
   only, resolved relative to the including file; `.c`/`.h`, not C++),
   and Rust (`mod x;` declarations and `use` trees, resolved through
-  `crate::`/`self::`/`super::`, child modules, and the crate's own
-  library name from `Cargo.toml`; std, dependencies, and other
-  workspace crates recorded as external).
+  `crate::`/`self::`/`super::`, child modules, the crate's own
+  library name from `Cargo.toml`, and sibling crates of the same Cargo
+  workspace it depends on by path; std and registry dependencies
+  recorded as external).
 
 - `.serval.yml`: optional per-repository overrides for the
   critical-path keyword list and the Git history window (see

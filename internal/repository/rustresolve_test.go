@@ -223,3 +223,83 @@ func TestRustResolver_LocalChildShadowsLibName(t *testing.T) {
 		t.Errorf("use my_app::auth from inside the library = %q, want unresolved", got)
 	}
 }
+
+// rustWorkspace returns the fixture holding a Cargo workspace (ws/) and
+// a crate outside it (vendor/ext) that a member depends on by path.
+func rustWorkspace(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.Abs("../../testdata/fixtures/rust-workspace")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestRustResolver_WorkspaceSiblings(t *testing.T) {
+	root := rustWorkspace(t)
+	cases := []struct {
+		name, from, spec, want string
+	}{
+		// workspace = true, through a [[bin]] of an explicitly listed member,
+		// and as an explicit extern path (::name).
+		{"inherited dependency", "ws/tools/cli/src/main.rs", "::core_types::model::Thing", "ws/crates/core-types/src/model.rs"},
+		// A path dependency on a crate matched by the crates/* glob.
+		{"glob member", "ws/tools/cli/src/main.rs", "app::service", "ws/crates/app/src/service.rs"},
+		// [dependencies.core-types] table form, item in the lib root.
+		{"dependency table", "ws/crates/net-io/src/client.rs", "core_types::Root", "ws/crates/core-types/src/lib.rs"},
+		// core-types.workspace = true (dotted key).
+		{"dotted inherited dependency", "ws/crates/app/src/service.rs", "core_types::Root", "ws/crates/core-types/src/lib.rs"},
+		// [lib] name = "netio", from a [target.'cfg(unix)'] table.
+		{"renamed lib name", "ws/tools/cli/src/main.rs", "netio::client::Conn", "ws/crates/net-io/src/client.rs"},
+		// package = "net-io" renames the dependency to transport.
+		{"renamed dependency", "ws/crates/app/src/service.rs", "transport::client::Conn", "ws/crates/net-io/src/client.rs"},
+		{"name replaced by rename", "ws/crates/app/src/service.rs", "netio::client::Conn", ""},
+		// Not a dependency of app: not nameable, even though a member.
+		{"undeclared sibling", "ws/crates/app/src/service.rs", "cli::x", ""},
+		// Outside the workspace root: not a member, stays external.
+		{"non-member path dependency", "ws/tools/cli/src/main.rs", "ext::Helper", ""},
+		// Listed in exclude: not a member.
+		{"excluded path dependency", "ws/tools/cli/src/main.rs", "legacy::Old", ""},
+		// An excluded crate is not a member, so it names no sibling.
+		{"excluded importer", "ws/crates/legacy/src/lib.rs", "core_types::model::Thing", ""},
+		// Registry dependencies and std stay external.
+		{"registry dependency", "ws/crates/app/src/service.rs", "serde::Deserialize", ""},
+		{"std", "ws/tools/cli/src/main.rs", "std::fmt", ""},
+		// A manifest key inside a multi-line string is not a dependency.
+		{"multi-line string", "ws/crates/core-types/src/model.rs", "fake::x", ""},
+	}
+	for _, c := range cases {
+		if got := resolveRust(t, root, c.from, analyzer.RawImport{Specifier: c.spec}); got != c.want {
+			t.Errorf("%s: %s: use %s = %q, want %q", c.name, c.from, c.spec, got, c.want)
+		}
+	}
+}
+
+func TestRustResolver_WorkspaceLocalChildShadowsSibling(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "Cargo.toml"), "[workspace]\nmembers = [\"a\", \"b\"]\n")
+	mustWriteFile(t, filepath.Join(root, "a", "Cargo.toml"), "[package]\nname = \"a\"\n[dependencies]\nb = { path = \"../b\" }\n")
+	mustWriteFile(t, filepath.Join(root, "a", "src", "lib.rs"), "mod b;\n")
+	mustWriteFile(t, filepath.Join(root, "a", "src", "b.rs"), "")
+	mustWriteFile(t, filepath.Join(root, "b", "Cargo.toml"), "[package]\nname = \"b\"\n")
+	mustWriteFile(t, filepath.Join(root, "b", "src", "lib.rs"), "")
+
+	if got := resolveRust(t, root, "a/src/lib.rs", analyzer.RawImport{Specifier: "b::T"}); got != "a/src/b.rs" {
+		t.Errorf("use b::T = %q, want the local child a/src/b.rs", got)
+	}
+	if got := resolveRust(t, root, "a/src/lib.rs", analyzer.RawImport{Specifier: "::b::T"}); got != "b/src/lib.rs" {
+		t.Errorf("use ::b::T = %q, want the sibling crate b/src/lib.rs", got)
+	}
+}
+
+func TestRustResolver_PathDependencyWithoutWorkspace(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "a", "Cargo.toml"), "[package]\nname = \"a\"\n[dependencies]\nb = { path = \"../b\" }\n")
+	mustWriteFile(t, filepath.Join(root, "a", "src", "lib.rs"), "")
+	mustWriteFile(t, filepath.Join(root, "b", "Cargo.toml"), "[package]\nname = \"b\"\n")
+	mustWriteFile(t, filepath.Join(root, "b", "src", "lib.rs"), "")
+
+	if got := resolveRust(t, root, "a/src/lib.rs", analyzer.RawImport{Specifier: "b::T"}); got != "" {
+		t.Errorf("use b::T outside any workspace = %q, want external", got)
+	}
+}

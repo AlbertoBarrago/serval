@@ -407,16 +407,22 @@ For Rust files, serval resolves:
   declarations nested in an inline `mod a { ... }` block
 - `use` declarations, with grouped trees expanded
   (`use crate::{a::X, b::{self, c}};`), through `crate::`, `self::`,
-  `super::`, a child module of the current one, or the crate's own
-  library name (from `Cargo.toml`) in its binaries, tests and examples
+  `super::`, a child module of the current one, the crate's own
+  library name (from `Cargo.toml`) in its binaries, tests and examples,
+  or a sibling crate of the same Cargo workspace that the crate depends
+  on by path (`path = "..."` or `workspace = true`; `[workspace]
+  members` globs and `exclude` honored)
 - Each file belongs to the crate of the nearest `Cargo.toml` above it,
   with Cargo's default target layout (`src/lib.rs`, `src/main.rs`,
   `src/bin/`, `tests/`, `examples/`, `benches/`)
 
 serval does **not** (yet) resolve, for Rust:
 
-- The standard library, dependencies from crates.io, and other crates
-  of the same Cargo workspace (recorded as external)
+- The standard library, dependencies from crates.io, and path
+  dependencies outside the workspace (recorded as external)
+- Inline qualified paths outside a `use` declaration
+  (`other_crate::f()` in an expression): only `use` and `mod` create
+  edges
 - `#[path = "..."]` attributes and macro-generated `mod`/`use`
 - Raw strings containing a `"` or ending in a backslash, nested block
   comments, and a block comment between a keyword and a name

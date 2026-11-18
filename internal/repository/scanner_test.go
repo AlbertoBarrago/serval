@@ -202,6 +202,39 @@ func contains(list []string, item string) bool {
 	return false
 }
 
+func TestScanAndComputeImpact_RustWorkspace(t *testing.T) {
+	root, err := filepath.Abs("../../testdata/fixtures/rust-workspace")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scanner, err := repository.NewScanner(root)
+	if err != nil {
+		t.Fatalf("NewScanner: %v", err)
+	}
+	g, err := scanner.Scan()
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	result := impact.Compute(g, filepath.Join(root, "ws/crates/core-types/src/model.rs"))
+
+	// net-io's client uses core_types::model, the CLI uses it too.
+	for _, rel := range []string{"ws/crates/core-types/src/lib.rs", "ws/crates/net-io/src/client.rs", "ws/tools/cli/src/main.rs"} {
+		if want := filepath.Join(root, rel); !contains(result.Direct, want) {
+			t.Errorf("expected direct impact to contain %s, got %v", want, result.Direct)
+		}
+	}
+	// app's service uses core_types::Root (lib.rs) and transport::client.
+	if want := filepath.Join(root, "ws/crates/app/src/service.rs"); !contains(result.Indirect, want) {
+		t.Errorf("expected indirect impact to contain %s, got %v", want, result.Indirect)
+	}
+	// legacy is excluded from the workspace: its import stays external.
+	if legacy := filepath.Join(root, "ws/crates/legacy/src/lib.rs"); contains(result.Direct, legacy) || contains(result.Indirect, legacy) {
+		t.Errorf("expected the excluded crate %s to be outside the impact", legacy)
+	}
+}
+
 func TestScanAndComputeImpact_SimpleRust(t *testing.T) {
 	root, err := filepath.Abs("../../testdata/fixtures/simple-rust")
 	if err != nil {
