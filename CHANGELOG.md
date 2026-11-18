@@ -5,6 +5,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.2] (2026-11-18)
+
 ### Added
 
 - Rust support: `mod x;` declarations and `use` trees resolve to module
