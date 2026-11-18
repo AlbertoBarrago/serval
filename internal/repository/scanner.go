@@ -11,6 +11,7 @@ import (
 	"github.com/AlbertoBarrago/serval/internal/analyzer/java"
 	"github.com/AlbertoBarrago/serval/internal/analyzer/javascript"
 	"github.com/AlbertoBarrago/serval/internal/analyzer/python"
+	"github.com/AlbertoBarrago/serval/internal/analyzer/rust"
 	"github.com/AlbertoBarrago/serval/internal/graph"
 )
 
@@ -25,6 +26,7 @@ var excludedDirs = map[string]struct{}{
 	"dist":         {},
 	"build":        {},
 	"coverage":     {},
+	"target":       {},
 	"vendor":       {},
 }
 
@@ -50,7 +52,7 @@ type Scanner struct {
 }
 
 // NewScanner builds a scanner rooted at root with the default set of
-// analyzers (currently JS/TS and Go).
+// analyzers (JS/TS, Go, Python, Java, C, Rust).
 func NewScanner(root string) (*Scanner, error) {
 	jsResolver, err := NewResolver(root)
 	if err != nil {
@@ -65,6 +67,7 @@ func NewScanner(root string) (*Scanner, error) {
 	pyResolver := NewPythonResolver(root)
 	javaResolver := NewJavaResolver()
 	cResolver := NewCResolver()
+	rustResolver := NewRustResolver()
 
 	return &Scanner{
 		root: root,
@@ -95,6 +98,12 @@ func NewScanner(root string) (*Scanner, error) {
 				analyzer: c.New(),
 				resolve: func(fromFile string, _ []byte, imp analyzer.RawImport) []string {
 					return cResolver.Resolve(fromFile, imp.Specifier)
+				},
+			},
+			{
+				analyzer: rust.New(),
+				resolve: func(fromFile string, _ []byte, imp analyzer.RawImport) []string {
+					return rustResolver.Resolve(fromFile, imp)
 				},
 			},
 		},

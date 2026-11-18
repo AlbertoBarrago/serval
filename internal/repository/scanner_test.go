@@ -201,3 +201,49 @@ func contains(list []string, item string) bool {
 	}
 	return false
 }
+
+func TestScanAndComputeImpact_SimpleRust(t *testing.T) {
+	root, err := filepath.Abs("../../testdata/fixtures/simple-rust")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scanner, err := repository.NewScanner(root)
+	if err != nil {
+		t.Fatalf("NewScanner: %v", err)
+	}
+
+	g, err := scanner.Scan()
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+
+	target := filepath.Join(root, "src/auth/token.rs")
+	if !g.HasNode(target) {
+		t.Fatalf("expected graph to contain target %s", target)
+	}
+
+	generated := filepath.Join(root, "target/debug/generated.rs")
+	if g.HasNode(generated) {
+		t.Errorf("expected target/ (Cargo build output) to be excluded from the scan")
+	}
+
+	result := impact.Compute(g, target)
+
+	// middleware.rs uses it (use super::token), auth/mod.rs declares it.
+	for _, rel := range []string{"src/auth/middleware.rs", "src/auth/mod.rs"} {
+		if want := filepath.Join(root, rel); !contains(result.Direct, want) {
+			t.Errorf("expected direct impact to contain %s, got %v", want, result.Direct)
+		}
+	}
+
+	wantIndirect := filepath.Join(root, "src/api/client.rs")
+	if !contains(result.Indirect, wantIndirect) {
+		t.Errorf("expected indirect impact to contain %s, got %v", wantIndirect, result.Indirect)
+	}
+
+	unrelated := filepath.Join(root, "src/unrelated.rs")
+	if contains(result.Direct, unrelated) || contains(result.Indirect, unrelated) {
+		t.Errorf("expected unrelated.rs to not be part of impact")
+	}
+}

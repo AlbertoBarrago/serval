@@ -71,7 +71,9 @@ func HasCorrelatedTest(root, targetPath string) bool {
 		candidates = []string{filepath.Join(testDir, name+"Test.java")}
 
 	default:
-		// No universal test-naming convention for this language (e.g. C):
+		// No universal test-naming convention for this language (e.g. C),
+		// or tests a filesystem check can't see (Rust keeps unit tests
+		// inline in #[cfg(test)] modules):
 		// the signal doesn't apply, so it never penalizes what it can't
 		// actually check.
 		return true
