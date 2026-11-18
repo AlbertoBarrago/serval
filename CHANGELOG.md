@@ -5,6 +5,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Rust support: `mod x;` declarations and `use` trees resolve to module
+  files through `crate::`/`self::`/`super::`, child modules, and the
+  crate's own library name from `Cargo.toml`, following Cargo's default
+  target layout. Statements inside inline `mod tests { ... }` blocks
+  resolve against that inline module, so `use super::*` adds no false
+  edge. The standard library, dependencies and other workspace crates
+  are recorded as external. See `docs/architecture.md`.
+- `target/` (Cargo and Maven build output) is now skipped by the
+  repository scan, like `dist/` and `build/`.
+
 ## [0.2.0] (2026-08-28)
 
 ### Added

@@ -43,7 +43,7 @@ inspect src"), every recognized module inside it is analyzed and
 reported as a risk-sorted summary instead of one full per-file report.
 <path> defaults to "." (the current directory) if omitted. See
 "serval --help" for the module-resolution scope and limitations
-(JavaScript/TypeScript, Go, Python, Java, C).
+(JavaScript/TypeScript, Go, Python, Java, C, Rust).
 
 An optional .serval.yml at the repository root can override the
 critical-path keyword list (criticalPaths), the Git history window

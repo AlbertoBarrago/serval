@@ -199,6 +199,66 @@ Implemented in `internal/repository` (`cresolve.go`) and
 Explicitly out of scope: macro expansion, any build-system awareness,
 and C++ (`.cpp`/`.hpp`/`.cc`) — only `.c`/`.h` are handled.
 
+## Rust module resolution scope
+
+Implemented in `internal/repository` (`rustresolve.go`, `cargo.go`) and
+`internal/analyzer/rust`:
+
+- Two kinds of raw import: `mod x;` declarations (`ModDecl`, the file
+  a module is loaded from) and `use` paths, with use trees expanded to
+  one specifier per leaf (`use crate::{a::X, b::{self, c}};` yields
+  `crate::a::X`, `crate::b`, `crate::b::c`; `as` renames are dropped
+  and a glob `a::*` yields `a`).
+- Every statement also carries the inline `mod name { ... }` blocks
+  enclosing it (`RawImport.Scope`), found by brace counting after
+  comments and string contents are blanked. Without it, the ubiquitous
+  `#[cfg(test)] mod tests { use super::*; }` would resolve `super` one
+  module too high and add a false edge from nearly every file to its
+  parent module.
+- Each file belongs to the crate of the nearest `Cargo.toml` above it,
+  read line by line for `[package] name`, `[lib] name` and `[lib] path`
+  only (basic or literal strings; no TOML dependency for three keys).
+  Its crate root follows Cargo's default target layout: `src/`,
+  `src/bin/x.rs` or `src/bin/x/main.rs`, and the same two shapes under
+  `tests/`, `examples/`, `benches/`. Under `src/`, a crate with both a
+  library and `src/main.rs` gives the binary the modules `main.rs`
+  declares and the library does not (`mod cli;` makes `src/cli.rs` and
+  `src/cli/` binary modules); everything else belongs to the library,
+  whose module directory is that of its root (`[lib] path` included). A
+  subdirectory of `tests/` without a `main.rs` (`tests/common/mod.rs`)
+  is a helper shared by several test crates, so its `crate::` paths are
+  left unresolved rather than guessed. Without a `Cargo.toml`, `mod`
+  declarations and `self::`/`super::` still resolve; `crate::` does not.
+- A module's children live in its own directory for a crate root or a
+  `mod.rs`, else in a sibling directory named after it (`src/a.rs` ->
+  `src/a/`, and a non-root `src/a/main.rs` -> `src/a/main/`), and a
+  module file is `dir.rs` or `dir/mod.rs`, matching rustc. A module
+  directory with no file of its own is an inline module, defined in the
+  nearest ancestor module file: `super::T` from `src/outer/child.rs`,
+  with `mod outer { mod child; }` in `lib.rs`, resolves to `lib.rs`.
+- A `use` path may end in an item rather than a module
+  (`crate::auth::token::Token`), which isn't decidable without parsing
+  the target, so the longest prefix that is a module file wins (the
+  same idea as Python's from-import fallback, extended to any depth). A
+  bare path (2018 edition) resolves only when at least its first
+  segment is a child module of the current one (which shadows any
+  crate name, as in rustc); otherwise it is an external crate. `std`/`core`/`alloc`, a leading `::`, and other
+  crates (including members of the same workspace) are recorded as
+  external, exactly like a JS/TS bare specifier into `node_modules`;
+  the one exception is the crate's own library name, used from its
+  binaries, tests and examples (not from inside the library itself).
+- Raw identifiers are normalized (`crate::r#type` is `type.rs`), and a
+  use tree needs no whitespace after the keyword (`use{a, b};`,
+  `use::dep::X;`).
+
+Explicitly out of scope: Cargo workspaces (cross-crate `use` between
+members), `#[path = "..."]` attributes, macro-generated `mod`/`use`,
+and three stripper limits. Raw strings (`r"..."`, `r#"..."#`) are lexed
+as ordinary strings, so one containing a `"` or ending in a backslash
+can expose its contents as code or hide the code after it. Nested
+block comments end at the first `*/`. A block comment is removed
+without leaving a separator, so `mod/* c */x;` is not recognized.
+
 ## The dependency graph
 
 `internal/graph` is a plain directed graph keyed by absolute file path,
@@ -218,7 +278,7 @@ cannot cause an infinite loop.
 
 `internal/repository.Scanner` walks the filesystem with
 `filepath.WalkDir`, skipping `node_modules`, `.git`, `dist`, `build`,
-`coverage`, and `vendor` at directory-entry level (`filepath.SkipDir`) so
+`coverage`, `target`, and `vendor` at directory-entry level (`filepath.SkipDir`) so
 those subtrees are never descended into, not just filtered after reading.
 Every file handled by a registered analyzer becomes a graph node even if
 it has zero imports, so an isolated file can still be a valid `inspect`
@@ -415,7 +475,9 @@ directory or a sibling `tests/`), and `Foo.java` under
 `src/main/java/...` / `FooTest.java` under the mirrored
 `src/test/java/...`. A file that is itself already a test by its own
 convention is never penalized. C has no reliable, universal test-naming
-convention, so the check is skipped entirely for it (reported as "has a
+convention, and Rust keeps unit tests inline (`#[cfg(test)] mod tests`)
+where a filesystem check can't see them, so the check is skipped
+entirely for both (reported as "has a
 test" rather than guessing) — a documented scope limitation, the same
 stance the language analyzers take elsewhere in this document. This is
 a heuristic, not a real coverage measurement (no cross-referencing of

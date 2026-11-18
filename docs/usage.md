@@ -401,6 +401,27 @@ serval does **not** (yet) resolve, for C:
 - Preprocessor conditionals (`#ifdef`/`#endif`): an `#include` inside a
   disabled branch is still extracted
 
+For Rust files, serval resolves:
+
+- Module declarations (`mod x;`) to `x.rs` or `x/mod.rs`, including
+  declarations nested in an inline `mod a { ... }` block
+- `use` declarations, with grouped trees expanded
+  (`use crate::{a::X, b::{self, c}};`), through `crate::`, `self::`,
+  `super::`, a child module of the current one, or the crate's own
+  library name (from `Cargo.toml`) in its binaries, tests and examples
+- Each file belongs to the crate of the nearest `Cargo.toml` above it,
+  with Cargo's default target layout (`src/lib.rs`, `src/main.rs`,
+  `src/bin/`, `tests/`, `examples/`, `benches/`)
+
+serval does **not** (yet) resolve, for Rust:
+
+- The standard library, dependencies from crates.io, and other crates
+  of the same Cargo workspace (recorded as external)
+- `#[path = "..."]` attributes and macro-generated `mod`/`use`
+- Raw strings containing a `"` or ending in a backslash, nested block
+  comments, and a block comment between a keyword and a name
+  (`mod/* c */x;`), in the comment/string stripper
+
 See `docs/architecture.md` for the rationale behind these limitations.
 
 ## Risk scoring
@@ -414,7 +435,7 @@ hidden or unexplained score.
 One of those contributions, "no correlated test file found" (+6), is a
 naming-convention heuristic (`internal/testsignal`), not a real coverage
 measurement — see `docs/architecture.md` for the exact per-language
-convention checked and why C is skipped entirely.
+convention checked and why C and Rust are skipped entirely.
 
 ## Repository configuration (`.serval.yml`)
 

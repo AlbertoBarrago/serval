@@ -27,10 +27,6 @@ LLM.
 
 ## Status
 
-> **Maintenance mode.** Serval is feature-complete within its documented
-> scope: no new language analyzers or CI providers are planned. Bug
-> fixes and compatibility updates (Go toolchain, Homebrew) still land.
-
 Implemented:
 
 - `serval inspect [path]`: direct/indirect dependents, Git history,
@@ -75,8 +71,12 @@ Implemented:
   standard library/third-party imports recorded as external), Java
   (plain, type-wildcard, and static imports; each file's own `package`
   declaration derives its source root, standard/Maven-Gradle
-  dependency imports recorded as external), and C (quoted `#include`
-  only, resolved relative to the including file; `.c`/`.h`, not C++).
+  dependency imports recorded as external), C (quoted `#include`
+  only, resolved relative to the including file; `.c`/`.h`, not C++),
+  and Rust (`mod x;` declarations and `use` trees, resolved through
+  `crate::`/`self::`/`super::`, child modules, and the crate's own
+  library name from `Cargo.toml`; std, dependencies, and other
+  workspace crates recorded as external).
 
 - `.serval.yml`: optional per-repository overrides for the
   critical-path keyword list and the Git history window (see
