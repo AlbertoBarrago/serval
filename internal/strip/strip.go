@@ -1,7 +1,7 @@
 // Package strip removes comments from C-family source code, preserving
 // string literal contents so a comment-like sequence inside a string is
 // not mistaken for an actual comment. A single parametrized lexer serves
-// every language serval parses (Go, JS/TS, Java, C, Groovy, JSONC)
+// every language serval parses (Go, JS/TS, Java, C, Rust, Groovy, JSONC)
 // instead of one near-identical state machine per analyzer.
 package strip
 
@@ -36,6 +36,10 @@ var (
 	// GroovyQuotes covers Jenkinsfile (Groovy): '...' and "..." with
 	// escapes.
 	GroovyQuotes = Opts{Quotes: "\"'", Escapes: true}
+	// RustQuotes covers Rust: only "..." with escapes. A ' cannot be a
+	// quote here, since lifetimes ('a) are unterminated; the Rust
+	// analyzer neutralizes char literals before stripping instead.
+	RustQuotes = Opts{Quotes: `"`, Escapes: true}
 )
 
 // Comments removes // line comments and /* */ block comments from src,

@@ -29,6 +29,18 @@ type RawImport struct {
 	// certain rather than a guess. Java-specific; ignored by other
 	// languages' resolvers.
 	Static bool
+	// ModDecl marks a Rust `mod name;` declaration, with Specifier set
+	// to the module name. Unlike a `use` path it names a file to load
+	// (name.rs or name/mod.rs), not an item to import. Rust-specific;
+	// ignored by other languages' resolvers.
+	ModDecl bool
+	// Scope lists the names of the inline `mod name { ... }` blocks that
+	// enclose the statement, outermost first (nil at file level). Rust
+	// resolves self::, super:: and nested `mod` declarations against
+	// that inline module, not the file's own module: without it, the
+	// ubiquitous `mod tests { use super::*; }` would point one level too
+	// high. Rust-specific; ignored by other languages' resolvers.
+	Scope []string
 }
 
 // Analyzer extracts raw imports from a single source file. It must not
